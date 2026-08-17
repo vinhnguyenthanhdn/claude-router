@@ -15,8 +15,8 @@ Security vulnerabilities and leaked credentials must not be reported in a public
 
 To run the suite on your own machine you need:
 
-- Windows 10/11
-- Windows PowerShell 5.1 or later
+- Windows 10/11 and Windows PowerShell 5.1 or later, for the PowerShell suite
+- A POSIX shell and Node 18+, for the shell suite — no Windows needed
 - Git
 
 Clone your fork, then run the isolated test suite:
@@ -26,6 +26,14 @@ powershell -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 ```
 
 The tests use temporary directories and must never mutate real Claude Code or VSCode settings.
+
+The POSIX side of the config layer has its own suite, which needs only a shell and Node:
+
+```sh
+sh tests/run-tests.sh
+```
+
+`scripts/common.sh` is the counterpart of `scripts/Common.ps1`: it finds `config.local.json` in the same precedence order, applies the same validation, and fails with the same wording. Node parses the JSON because Claude Code already requires Node, so it is not a new dependency; `jq` and `python3` would be. A shell launcher (#9), the macOS VSCode switch (#10) and the Linux entries (#6) build on this rather than re-reading the config themselves, so the two platforms cannot drift into disagreeing about what a valid config is.
 
 ### Contributing without a Windows machine
 

@@ -50,3 +50,32 @@ jobs:
       - name: Run isolated behavior tests
         shell: powershell
         run: .\tests\run-tests.ps1
+
+  posix-shell:
+    # The shell side of the config layer, on the two platforms it is being
+    # ported to. Node is what parses the config, so both supported floors run.
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [18, 22]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Parse shell scripts
+        run: |
+          for file in scripts/*.sh tests/*.sh; do
+            echo "Parsing $file"
+            sh -n "$file"
+          done
+
+      - name: Run isolated behavior tests
+        run: sh tests/run-tests.sh

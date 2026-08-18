@@ -1,5 +1,6 @@
 #!/bin/sh
-# Behavior tests for scripts/common.sh, the POSIX side of the config layer.
+# Behavior tests for the POSIX side: scripts/common.sh (the config layer) and
+# scripts/claude-9router (the launcher built on it).
 #
 # Everything runs against a throwaway tree under $TMPDIR: the suite never reads
 # or writes a real config, a real settings file, or anything under the user's
@@ -225,6 +226,150 @@ managed=$(
     router_is_managed_env_name PATH || printf 'no'
 )
 check_eq 'only the toolkit-owned names are managed' "$managed" 'yes yes no'
+
+# --- the launcher ----------------------------------------------------------
+#
+# The launcher's whole job is the environment it hands to Claude Code, so the
+# assertions read that environment rather than the script's text. `claude` is a
+# stub on PATH that prints the variables the toolkit owns and exits with a code
+# the case chooses; nothing here runs a real Claude Code, and PATH is rebuilt
+# per case inside a subshell so the stub cannot outlive it.
+
+launcher="$root/scripts/claude-9router"
+stub_dir="$temp/stub"
+mkdir -p "$stub_dir"
+cat > "$stub_dir/claude" <<'STUB'
+#!/bin/sh
+# Reports whether each managed name is set, and with what. "unset" is a
+# distinct answer from empty: the launcher must remove names, not blank them.
+for name in ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL \
+    ANTHROPIC_SMALL_FAST_MODEL ANTHROPIC_API_KEY \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+do
+    eval "set_check=\${$name+set}"
+    if [ "${set_check:-}" = set ]; then
+        eval "printf '%s=%s\n' \"\$name\" \"\$$name\""
+    else
+        printf '%s=<unset>\n' "$name"
+    fi
+done
+printf 'ARGS=%s\n' "$*"
+exit "${STUB_EXIT:-0}"
+STUB
+chmod +x "$stub_dir/claude"
+
+# Runs the launcher with the stub ahead of the real PATH, and prints its output
+# followed by a final line carrying the exit status.
+launch() {
+    (
+        PATH="$stub_dir:$PATH"
+        export PATH
+        set +e
+        out=$("$launcher" "$@" 2>&1)
+        status=$?
+        set -e
+        printf '%s\nSTATUS=%s\n' "$out" "$status"
+    )
+}
+
+small="$temp/with-small.json"
+write_config "$small" <<'JSON'
+{
+  "baseUrl": "https://router.test/api/",
+  "authToken": "launcher-token-not-a-secret",
+  "mainModel": "vendor/main-model",
+  "smallFastModel": "vendor/small-model"
+}
+JSON
+
+out=$(CLAUDE_ROUTER_CONFIG="$small" launch --dry-run)
+check_contains 'dry run prints the base URL and the model' "$out" '[9Router] base=https://router.test/api model=vendor/main-model'
+check_contains 'dry run says Claude Code was not started' "$out" 'dry run; Claude Code was not started'
+check_eq 'dry run exits 0' "$(field "$out" '$')" 'STATUS=0'
+case "$out" in
+    *ARGS=*) fail 'dry run does not start Claude Code' 'the stub ran anyway' ;;
+    *) ok 'dry run does not start Claude Code' ;;
+esac
+case "$out" in
+    *launcher-token-not-a-secret*) fail 'the auth token is never printed' 'the token appeared in the output' ;;
+    *) ok 'the auth token is never printed' ;;
+esac
+
+out=$(CLAUDE_ROUTER_CONFIG="$small" launch)
+check_contains 'the child gets the base URL with the trailing slash stripped' "$out" 'ANTHROPIC_BASE_URL=https://router.test/api'
+check_contains 'the child gets the auth token' "$out" 'ANTHROPIC_AUTH_TOKEN=launcher-token-not-a-secret'
+check_contains 'the child gets the main model' "$out" 'ANTHROPIC_MODEL=vendor/main-model'
+check_contains 'a configured smallFastModel reaches the child' "$out" 'ANTHROPIC_SMALL_FAST_MODEL=vendor/small-model'
+check_contains 'nonessential traffic is disabled for the child' "$out" 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
+
+# Both of these are about a parent shell that is already carrying the names:
+# the launcher has to remove them, and "unset" is the only answer that proves it
+# rather than a blank value the CLI would still read as configured.
+no_small="$temp/no-small.json"
+write_config "$no_small" <<'JSON'
+{
+  "baseUrl": "https://router.test",
+  "authToken": "launcher-token-not-a-secret",
+  "mainModel": "vendor/main-model"
+}
+JSON
+out=$(
+    ANTHROPIC_API_KEY='parent-key-not-a-secret' \
+    ANTHROPIC_SMALL_FAST_MODEL='vendor/leftover-small' \
+    CLAUDE_ROUTER_CONFIG="$no_small" launch
+)
+check_contains 'an inherited ANTHROPIC_API_KEY is removed for the child' "$out" 'ANTHROPIC_API_KEY=<unset>'
+check_contains 'no smallFastModel in the config means unset in the child' "$out" 'ANTHROPIC_SMALL_FAST_MODEL=<unset>'
+
+# The parent shell is the thing a user notices: if the launcher leaked, the next
+# plain `claude` in the same window would still be routed.
+parent=$(
+    PATH="$stub_dir:$PATH"; export PATH
+    ANTHROPIC_API_KEY='parent-key-not-a-secret'; export ANTHROPIC_API_KEY
+    CLAUDE_ROUTER_CONFIG="$good"; export CLAUDE_ROUTER_CONFIG
+    "$launcher" --dry-run >/dev/null 2>&1
+    printf '%s|%s\n' "${ANTHROPIC_BASE_URL:-<unset>}" "${ANTHROPIC_API_KEY:-<unset>}"
+)
+check_eq 'the parent shell is unchanged after the launcher exits' "$parent" '<unset>|parent-key-not-a-secret'
+
+out=$(CLAUDE_ROUTER_CONFIG="$small" launch --dry-run=no-such-form)
+check_eq 'an unknown option is forwarded, not swallowed' "$(field "$out" '$')" 'STATUS=0'
+
+out=$(CLAUDE_ROUTER_CONFIG="$small" launch -p 'hello world' --model x)
+check_contains 'remaining arguments reach Claude Code unchanged' "$out" 'ARGS=-p hello world --model x'
+
+out=$(CLAUDE_ROUTER_CONFIG="$small" launch -- --dry-run)
+check_contains 'after -- the launcher options belong to Claude Code' "$out" 'ARGS=--dry-run'
+
+out=$(STUB_EXIT=42 CLAUDE_ROUTER_CONFIG="$small" launch)
+check_eq "Claude Code's exit code is propagated" "$(field "$out" '$')" 'STATUS=42'
+
+# --config outranks $CLAUDE_ROUTER_CONFIG, the same precedence common.sh applies.
+out=$(CLAUDE_ROUTER_CONFIG="$good" launch --config "$small" --dry-run)
+check_contains '--config wins over CLAUDE_ROUTER_CONFIG' "$out" 'model=vendor/main-model'
+
+out=$(CLAUDE_ROUTER_CONFIG="$good" launch --config="$small" --dry-run)
+check_contains '--config=value is accepted too' "$out" 'model=vendor/main-model'
+
+out=$(launch --config)
+check_contains '--config with no path is refused' "$out" '--config needs a path'
+check_eq '--config with no path exits non-zero' "$(field "$out" '$')" 'STATUS=2'
+
+# A rejected config must stop the launcher before Claude Code starts, not after.
+bad="$temp/bad-launcher.json"
+write_config "$bad" <<'JSON'
+{"baseUrl": "", "authToken": "t", "mainModel": "vendor/model"}
+JSON
+out=$(launch --config "$bad")
+check_contains 'a rejected config names the offending field' "$out" 'Missing required config value: baseUrl'
+check_eq 'a rejected config exits non-zero' "$(field "$out" '$')" 'STATUS=1'
+case "$out" in
+    *ARGS=*) fail 'a rejected config does not start Claude Code' 'the stub ran anyway' ;;
+    *) ok 'a rejected config does not start Claude Code' ;;
+esac
+
+out=$(launch --config "$temp/no-such-config.json")
+check_contains 'a missing config names the remedy' "$out" 'Copy config.example.json to config.local.json'
 
 printf '\n%s passed, %s failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ]

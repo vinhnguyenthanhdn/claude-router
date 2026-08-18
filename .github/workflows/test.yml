@@ -72,7 +72,7 @@ jobs:
 
       - name: Parse shell scripts
         run: |
-          for file in scripts/*.sh tests/*.sh; do
+          for file in scripts/*.sh scripts/claude-9router tests/*.sh; do
             echo "Parsing $file"
             sh -n "$file"
           done

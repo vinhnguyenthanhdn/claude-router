@@ -121,6 +121,24 @@ claude-9router -p "Reply with exactly: ROUTER_OK"
 
 Then open 9Router **Console Log** and confirm the request was routed to the selected provider/model.
 
+### On macOS and Linux
+
+Step 4 does not apply — there is no installer for these platforms — so the launcher runs out of the clone and the config lives next to it:
+
+```sh
+cp config.example.json config.local.json   # then fill in baseUrl, authToken, mainModel
+./scripts/claude-9router --dry-run
+./scripts/claude-9router -p "Reply with exactly: ROUTER_OK"
+```
+
+The variables, the removal of a conflicting `ANTHROPIC_API_KEY`, and the promise not to touch `~/.claude/settings.json` are identical. Three practical differences:
+
+- Options are `--dry-run` and `--config <path>`, not `-DryRun` and `-ConfigPath`. `--` ends the launcher's options.
+- The config is looked up in the same order, but the last two candidates resolve to `scripts/config.local.json` and `config.local.json` in the clone rather than under `%USERPROFILE%\.claude\9router`. `CLAUDE_ROUTER_CONFIG` works the same way and is the cleanest way to keep the config outside the clone.
+- Because you run the clone directly, `git pull` **is** the upgrade — the gap section 8 describes does not exist here. The other half of it still does: `config.local.json` is copied once, so a key added to the example later is absent from yours.
+
+Section 6 is Windows-only: the VSCode panel switch is not ported ([#10](https://github.com/vinhnguyenthanhdn/claude-router/issues/10)).
+
 ## 6. Use the native VSCode extension
 
 Enable:

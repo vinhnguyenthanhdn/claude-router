@@ -40,9 +40,11 @@ Any provider and model that 9Router exposes through its Anthropic-compatible `/v
 
 <p align="center"><em>A Claude Code terminal session routed to <code>oc/deepseek-v4-flash-free</code> through the OpenCode Free provider.</em></p>
 
+On macOS and Linux the terminal launcher works and nothing else does yet — see [macOS and Linux](#macos-and-linux). The installer, the PATH entry and the VSCode switch are Windows-only.
+
 ## Prerequisites
 
-- Windows 10/11 and Windows PowerShell 5.1 or later
+- Windows 10/11 and Windows PowerShell 5.1 or later, **or** macOS/Linux with any POSIX shell for the terminal launcher only
 - Claude Code CLI and/or the Claude Code VSCode extension
 - a running 9Router installation
 - at least one configured 9Router provider and a 9Router API key
@@ -87,6 +89,23 @@ claude-9router -DryRun         # Print the endpoint and model, do not start Clau
 ```
 
 Only the routed child process receives the proxy variables. Global Claude Code settings remain untouched.
+
+### macOS and Linux
+
+`scripts/claude-9router` is the POSIX counterpart of the PowerShell entry: same config file, same lookup order, same validation and the same wording when it refuses one. There is no installer on these platforms, so you run it out of the clone and put it on your own PATH if you want a bare command:
+
+```sh
+git clone https://github.com/vinhnguyenthanhdn/claude-router.git
+cd claude-router
+cp config.example.json config.local.json   # then fill in baseUrl, authToken, mainModel
+./scripts/claude-9router --dry-run          # print the endpoint and model, do not start Claude
+./scripts/claude-9router                    # routed session
+./scripts/claude-9router -p "Hello"         # remaining arguments go to Claude Code untouched
+```
+
+Two differences from the Windows entry, both because POSIX shells and PowerShell disagree about flags: options are `--dry-run` and `--config <path>` rather than `-DryRun` and `-ConfigPath`, and `--` ends the launcher's own options so a Claude argument of the same name reaches Claude.
+
+What is **not** ported: `install.ps1` (so no PATH entry and no managed copy under your profile), `uninstall.ps1`, and `vscode-switch.ps1` — the VSCode panel on macOS is [#10](https://github.com/vinhnguyenthanhdn/claude-router/issues/10) and Linux packaging is [#6](https://github.com/vinhnguyenthanhdn/claude-router/issues/6). Node is required, as it is the JSON parser for the shell path; Claude Code already requires it.
 
 ### VSCode extension
 

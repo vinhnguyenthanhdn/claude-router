@@ -1,0 +1,82 @@
+#!/usr/bin/env sh
+# POSIX counterpart of claude-9router.ps1: start Claude Code pointed at a
+# 9Router endpoint, for this child process only.
+#
+# Nothing here touches a shell profile or the parent shell. The variables are
+# set in this script's own environment and inherited by the `claude` it execs,
+# so the shell you ran it from is unchanged the moment it returns — the same
+# promise the PowerShell entry makes by mutating only its own $env:.
+set -eu
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" >/dev/null 2>&1 && pwd -P)
+ROUTER_SCRIPT_DIR="$script_dir"
+export ROUTER_SCRIPT_DIR
+# shellcheck source=common.sh
+. "$script_dir/common.sh"
+
+config_path=''
+dry_run=0
+
+# Only the leading options belong to this launcher; everything from the first
+# unrecognised word on is Claude Code's, forwarded untouched. `--` ends the
+# launcher's own options explicitly, for a Claude argument that would otherwise
+# look like one of them.
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --config)
+            [ $# -ge 2 ] || { echo "--config needs a path." >&2; exit 2; }
+            config_path="$2"
+            shift 2
+            ;;
+        --config=*)
+            config_path="${1#--config=}"
+            shift
+            ;;
+        --dry-run)
+            dry_run=1
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+router_load_config "$config_path" || exit 1
+
+ANTHROPIC_BASE_URL="$ROUTER_BASE_URL"
+ANTHROPIC_AUTH_TOKEN="$ROUTER_AUTH_TOKEN"
+ANTHROPIC_MODEL="$ROUTER_MAIN_MODEL"
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+export ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+
+# An API key already in the environment outranks the auth token, so a key left
+# over from a previous session would route this run straight back to Anthropic
+# with nothing in the output saying so.
+unset ANTHROPIC_API_KEY
+
+# Absent from the config means absent from the child, not inherited from
+# whatever the parent shell happened to be carrying.
+if [ -n "$ROUTER_SMALL_FAST_MODEL" ]; then
+    ANTHROPIC_SMALL_FAST_MODEL="$ROUTER_SMALL_FAST_MODEL"
+    export ANTHROPIC_SMALL_FAST_MODEL
+else
+    unset ANTHROPIC_SMALL_FAST_MODEL
+fi
+
+# The token is never part of this line, on either platform.
+echo "[9Router] base=$ROUTER_BASE_URL model=$ROUTER_MAIN_MODEL"
+
+if [ "$dry_run" = 1 ]; then
+    echo "[9Router] dry run; Claude Code was not started."
+    exit 0
+fi
+
+# exec replaces this shell, so Claude Code's exit code is this command's exit
+# code with nothing in between to lose or rewrite it.
+exec claude "$@"

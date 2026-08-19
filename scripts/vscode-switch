@@ -83,21 +83,72 @@ if [ ! -f "$settings_path" ]; then
     exit 1
 fi
 
+# VSCode settings are JSONC: comments and trailing commas are valid there.
+# Normalize only for reading. Writes intentionally refuse JSONC because a
+# JSON.parse -> JSON.stringify round-trip would silently delete comments.
+jsonc_read() {
+    node - "$1" <<'NODE'
+const fs = require('fs');
+const path = process.argv[2];
+const source = fs.readFileSync(path, 'utf8');
+function normalize(s) {
+    let out = '', state = 'code', escaped = false, changed = false;
+    for (let i = 0; i < s.length; i += 1) {
+        const c = s[i], n = s[i + 1];
+        if (state === 'string') {
+            out += c;
+            if (escaped) escaped = false;
+            else if (c === '\\') escaped = true;
+            else if (c === '"') state = 'code';
+            continue;
+        }
+        if (c === '"') { state = 'string'; out += c; continue; }
+        if (c === '/' && n === '/') {
+            changed = true; i += 2;
+            while (i < s.length && s[i] !== '\n') i += 1;
+            if (i < s.length) out += '\n';
+            continue;
+        }
+        if (c === '/' && n === '*') {
+            changed = true; i += 2;
+            while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) i += 1;
+            if (i < s.length) i += 1;
+            continue;
+        }
+        if (c === ',') {
+            let j = i + 1;
+            while (j < s.length && /\s/.test(s[j])) j += 1;
+            if (s[j] === '}' || s[j] === ']') { changed = true; continue; }
+        }
+        out += c;
+    }
+    return { text: out, changed };
+}
+try {
+    JSON.parse(source);
+    process.stdout.write(`JSON\n${source}`);
+} catch (err) {
+    const parsed = normalize(source);
+    try {
+        JSON.parse(parsed.text);
+        process.stdout.write(`${parsed.changed ? 'JSONC' : 'INVALID'}\n${parsed.text}`);
+    } catch (_) {
+        console.error(`Invalid JSON in VSCode settings ${JSON.stringify(path)}: ${err.message}`);
+        process.exit(1);
+    }
+}
+NODE
+}
+
 # Reading and writing the settings file both go through node, for the same
 # reason common.sh does: it is the one JSON parser a Claude Code user is
 # guaranteed to have.
 if [ "$mode" = 'status' ]; then
-    ROUTER_SETTINGS_PATH="$settings_path" ROUTER_SETTINGS_KEY="$settings_key" node -e '
+    if ! parsed=$(jsonc_read "$settings_path"); then exit 1; fi
+    printf '%s\n' "$parsed" | tail -n +2 | ROUTER_SETTINGS_KEY="$settings_key" node -e '
 const fs = require("fs");
-const path = process.env.ROUTER_SETTINGS_PATH;
-let settings;
-try {
-    settings = JSON.parse(fs.readFileSync(path, "utf8"));
-} catch (err) {
-    console.error(`Invalid JSON in VSCode settings ${JSON.stringify(path)}: ${err.message}`);
-    process.exit(1);
-}
-const entries = Array.isArray(settings?.[process.env.ROUTER_SETTINGS_KEY])
+const settings = JSON.parse(fs.readFileSync(0, "utf8"));
+const entries = Array.isArray(settings[process.env.ROUTER_SETTINGS_KEY])
     ? settings[process.env.ROUTER_SETTINGS_KEY]
     : [];
 const find = (name) => entries.find((e) => e && e.name === name);
@@ -120,24 +171,19 @@ if [ "$mode" = 'on' ]; then
     router_load_config "$config_path" || exit 1
 fi
 
-# Parse before copying. A file the toolkit cannot read is refused without
-# leaving a `.bak-claude-router` next to it, so the presence of that file always
-# means a write was attempted rather than merely considered.
-ROUTER_SETTINGS_PATH="$settings_path" node -e '
-const fs = require("fs");
-const path = process.env.ROUTER_SETTINGS_PATH;
-let settings;
-try {
-    settings = JSON.parse(fs.readFileSync(path, "utf8"));
-} catch (err) {
-    console.error(`Invalid JSON in VSCode settings ${JSON.stringify(path)}: ${err.message}`);
-    process.exit(1);
-}
-if (settings === null || typeof settings !== "object" || Array.isArray(settings)) {
-    console.error(`Invalid JSON in VSCode settings ${JSON.stringify(path)}: expected an object.`);
-    process.exit(1);
-}
-' || exit 1
+# Parse before copying. Strict JSON is writable. If JSONC parsing succeeds,
+# refuse the write before creating the backup because rewriting the file would
+# discard comments and could alter user formatting.
+if ! parsed=$(jsonc_read "$settings_path"); then exit 1; fi
+kind=$(printf '%s\n' "$parsed" | sed -n '1p')
+case "$kind" in
+    JSONC)
+        echo "Refusing to modify JSONC VSCode settings \"$settings_path\"; comments or trailing commas would be lost." >&2
+        exit 1
+        ;;
+    JSON) : ;;
+    *) echo "Invalid JSON in VSCode settings \"$settings_path\"." >&2; exit 1 ;;
+esac
 
 backup_path="$settings_path.bak-claude-router"
 cp -- "$settings_path" "$backup_path"

@@ -99,3 +99,6 @@ jobs:
 
       - name: Run isolated behavior tests
         run: sh tests/run-tests.sh
+
+      - name: Run VSCode JSONC regression tests
+        run: sh tests/vscode-switch-jsonc.sh

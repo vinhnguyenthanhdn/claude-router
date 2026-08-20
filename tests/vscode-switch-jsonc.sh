@@ -38,7 +38,15 @@ cat > "$settings" <<'JSON'
 }
 JSON
 out=$("$root/scripts/vscode-switch" status --settings "$settings")
-case "$out" in *"router enabled"* && *"Authentication token: configured (hidden)"*) ;; *) echo 'status did not report JSONC router state' >&2; exit 1;; esac
+case "$out" in
+  *"router enabled"*)
+    case "$out" in
+      *"Authentication token: configured (hidden)"*) ;;
+      *) echo 'status did not report hidden token state' >&2; exit 1;;
+    esac
+    ;;
+  *) echo 'status did not report JSONC router state' >&2; exit 1;;
+esac
 case "$out" in *"test-token"*) echo 'status leaked token' >&2; exit 1;; esac
 
 before=$(cat "$settings")

@@ -124,15 +124,23 @@ function normalize(s) {
     }
     return { text: out, changed };
 }
+function validateObject(value) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        console.error(`Invalid JSON in VSCode settings ${JSON.stringify(path)}: expected an object.`);
+        process.exit(1);
+    }
+    return value;
+}
 try {
-    JSON.parse(source);
+    const value = validateObject(JSON.parse(source));
     process.stdout.write(`JSON\n${source}`);
 } catch (err) {
     const parsed = normalize(source);
     try {
-        JSON.parse(parsed.text);
+        validateObject(JSON.parse(parsed.text));
         process.stdout.write(`${parsed.changed ? 'JSONC' : 'INVALID'}\n${parsed.text}`);
     } catch (_) {
+        if (err && /expected an object\.$/.test(err.message)) process.exit(1);
         console.error(`Invalid JSON in VSCode settings ${JSON.stringify(path)}: ${err.message}`);
         process.exit(1);
     }

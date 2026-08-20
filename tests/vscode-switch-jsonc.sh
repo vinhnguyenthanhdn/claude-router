@@ -64,4 +64,16 @@ case "$(cat "$temp/out")" in *"Invalid JSON in VSCode settings"*) ;; *) exit 1;;
 [ "$(cat "$settings")" = "$before" ]
 [ ! -e "$settings.bak-claude-router" ]
 
+for value in null '[]'; do
+  printf '%s\n' "$value" > "$settings"
+  before=$(cat "$settings")
+  if "$root/scripts/vscode-switch" on --config "$config" --settings "$settings" >"$temp/out" 2>&1; then
+    echo "on unexpectedly accepted non-object settings: $value" >&2
+    exit 1
+  fi
+  case "$(cat "$temp/out")" in *"expected an object"*) ;; *) echo "non-object settings error is wrong: $value" >&2; exit 1;; esac
+  [ "$(cat "$settings")" = "$before" ]
+  [ ! -e "$settings.bak-claude-router" ]
+done
+
 echo 'All vscode-switch JSONC tests passed.'

@@ -629,6 +629,21 @@ if (cd "$root" && git rev-parse --git-dir >/dev/null 2>&1); then
         scanned=$((scanned + 1))
         mode=$(cd "$root" && git ls-files -s "$entry" | cut -d' ' -f1)
         check_eq "$entry is committed executable" "$mode" '100755'
+        # The CI parse step recognises POSIX sh shebangs and runs `sh -n`. A
+        # script declaring bash would be skipped by it silently — parsed by
+        # nothing, with the step still reporting success. Rather than teach the
+        # step every shell, hold the repository to the one it can parse, and
+        # say so here where the script is added.
+        shebang=$(head -n 1 -- "$root/$entry")
+        case "$shebang" in
+            '#!/bin/sh'|'#!/usr/bin/env sh')
+                ok "$entry declares a shell the parse step can check"
+                ;;
+            *)
+                fail "$entry declares a shell the parse step can check" \
+                     "expected #!/bin/sh or #!/usr/bin/env sh, got [$shebang]"
+                ;;
+        esac
     done
     # A scan that finds nothing is a broken scan, not a clean repository.
     # Without this the block turns into a silent no-op the first time the

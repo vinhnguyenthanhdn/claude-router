@@ -16,40 +16,73 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      # Tracked files, not whatever sits in the worktree: the question is
+      # whether what ships parses. And a scan that finds nothing is a broken
+      # scan, not a clean repository — without the count, a directory rename
+      # turns either of these steps into a green no-op.
       - name: Validate JSON files
         shell: powershell
         run: |
-          Get-ChildItem -Recurse -Filter *.json | ForEach-Object {
-            Write-Host "Validating $($_.FullName)"
-            Get-Content $_.FullName -Raw | ConvertFrom-Json | Out-Null
+          $files = git ls-files '*.json'
+          $checked = 0
+          foreach ($file in $files) {
+            Write-Host "Validating $file"
+            Get-Content $file -Raw | ConvertFrom-Json | Out-Null
+            $checked += 1
+          }
+          Write-Host "Validated $checked JSON file(s)."
+          if ($checked -eq 0) {
+            Write-Error 'No committed JSON file was found — the scan must never be empty.'
+            exit 1
           }
 
       - name: Parse PowerShell scripts
         shell: powershell
         run: |
           $failed = $false
-          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+          $files = git ls-files '*.ps1'
+          $parsed = 0
+          foreach ($file in $files) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile(
-              $_.FullName,
+              (Resolve-Path $file).Path,
               [ref]$tokens,
               [ref]$errors
             ) | Out-Null
+            $parsed += 1
             if ($errors.Count -gt 0) {
               $failed = $true
               $errors | ForEach-Object { Write-Error $_.Message }
             }
           }
+          Write-Host "Parsed $parsed PowerShell script(s)."
+          if ($parsed -eq 0) {
+            Write-Error 'No committed PowerShell script was found — the scan must never be empty.'
+            exit 1
+          }
           if ($failed) { exit 1 }
 
-      - name: Scan for secrets and private identifiers
+      # Every tracked test script under tests/, discovered rather than named.
+      # Naming them meant a script added later ran nowhere and nothing said so;
+      # the secret scan is one of these scripts, not a separate step, so it
+      # cannot fall out of the set either.
+      - name: Run every committed test script
         shell: powershell
-        run: .\tests\scan-secrets.ps1
-
-      - name: Run isolated behavior tests
-        shell: powershell
-        run: .\tests\run-tests.ps1
+        run: |
+          $scripts = git ls-files 'tests/*.ps1'
+          $ran = 0
+          foreach ($script in $scripts) {
+            Write-Host "Running $script"
+            & powershell -NoProfile -File $script
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $ran += 1
+          }
+          Write-Host "Ran $ran PowerShell test script(s)."
+          if ($ran -eq 0) {
+            Write-Error 'No committed PowerShell test script was found — the run must never be empty.'
+            exit 1
+          }
 
   posix-shell:
     # The shell side of the config layer, on the two platforms it is being
@@ -97,8 +130,21 @@ jobs:
             exit 1
           fi
 
-      - name: Run isolated behavior tests
-        run: sh tests/run-tests.sh
-
-      - name: Run VSCode JSONC regression tests
-        run: sh tests/vscode-switch-jsonc.sh
+      # Same rule as the parse step above, one layer out: the set of suites to
+      # run is discovered, not listed. Listing them is how a second suite
+      # (tests/vscode-switch-jsonc.sh) needed a workflow edit to run at all,
+      # and a third would have needed another one that nothing would demand.
+      - name: Run every committed test script
+        run: |
+          set -eu
+          ran=0
+          for suite in $(git ls-files 'tests/*.sh'); do
+            echo "Running $suite"
+            sh "$suite"
+            ran=$((ran + 1))
+          done
+          echo "Ran $ran POSIX test script(s)."
+          if [ "$ran" -eq 0 ]; then
+            echo "No committed POSIX test script was found — the run must never be empty."
+            exit 1
+          fi

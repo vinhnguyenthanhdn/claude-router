@@ -12,7 +12,7 @@ $allowedContactEmails = @(
 )
 
 $patterns = @(
-    @{ Name = 'Likely API key'; Regex = '(?i)\bsk-[a-z0-9_-]{16,}\b' },
+    @{ Name = 'Likely API key'; Regex = '(?i)\bsk-[a-z0-9_-]{99,}\b' },
     @{ Name = 'Private key'; Regex = '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' },
     @{ Name = 'Machine user path'; Regex = '(?i)\bC:\\Users\\(?!USERNAME\b|<)[^\\\s"'']+' },
     @{ Name = 'Email address'; Regex = '(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b' },

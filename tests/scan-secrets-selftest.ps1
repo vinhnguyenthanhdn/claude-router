@@ -14,6 +14,23 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $scanner = Join-Path $root 'tests\scan-secrets.ps1'
 
+function Invoke-Scanner {
+    param([string]$Root)
+    # A finding goes to stderr, and under 'Stop' a native command writing to
+    # stderr is a terminating error: the self-test would die on the very
+    # rejection it exists to observe. Drop to 'Continue' for the call and read
+    # the exit code, which is the scanner's actual verdict.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & powershell -NoProfile -File $scanner -Root $Root 2>&1 | Out-Null
+        return $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
 $cases = @(
     @{ Name = 'Likely API key'; File = 'notes.txt'; Body = ('sk-' + 'abcdefghijklmnop1234') }
     @{ Name = 'Private key'; File = 'id_rsa'; Body = ('-----' + 'BEGIN' + ' RSA PRIVATE KEY-----') }
@@ -34,8 +51,7 @@ try {
         # A child process, not a dot-source: the scanner sets its own error
         # preference and calls Write-Error, so running it in this session would
         # abort the self-test instead of letting it read the exit code.
-        & powershell -NoProfile -File $scanner -Root $dir 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) {
+        if ((Invoke-Scanner -Root $dir) -eq 0) {
             Write-Error ("The scanner accepted a tree carrying '" + $case.Name + "'. That pattern can no longer go red.")
             exit 1
         }
@@ -47,8 +63,7 @@ try {
     $clean = Join-Path $temp 'clean'
     New-Item -ItemType Directory -Path $clean -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $clean 'README.md') -Value 'Nothing to find here.' -Encoding UTF8
-    & powershell -NoProfile -File $scanner -Root $clean | Out-Null
-    if ($LASTEXITCODE -ne 0) {
+    if ((Invoke-Scanner -Root $clean) -ne 0) {
         Write-Error 'The scanner rejected a clean tree. It is failing for a reason other than a finding.'
         exit 1
     }

@@ -36,7 +36,7 @@ try {
         # abort the self-test instead of letting it read the exit code.
         & powershell -NoProfile -File $scanner -Root $dir 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
-            Write-Error ("The scanner accepted a tree carrying '" + $case.Name + "' — that pattern can no longer go red.")
+            Write-Error ("The scanner accepted a tree carrying '" + $case.Name + "'. That pattern can no longer go red.")
             exit 1
         }
         Write-Host ("Rejected as expected: " + $case.Name)
@@ -49,7 +49,7 @@ try {
     Set-Content -LiteralPath (Join-Path $clean 'README.md') -Value 'Nothing to find here.' -Encoding UTF8
     & powershell -NoProfile -File $scanner -Root $clean | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Write-Error 'The scanner rejected a clean tree — it is failing for a reason other than a finding.'
+        Write-Error 'The scanner rejected a clean tree. It is failing for a reason other than a finding.'
         exit 1
     }
     Write-Host 'Accepted as expected: a tree with nothing to find'

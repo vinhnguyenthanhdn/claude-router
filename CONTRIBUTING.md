@@ -41,6 +41,8 @@ Shell scripts are parsed in CI by extension or shebang rather than from a list o
 
 The same rule decides which files must be committed executable: every tracked file whose first line is a shebang is asserted at git mode `100755`, and the scan fails if it matches nothing. `scripts/common.sh` is sourced rather than run and carries no shebang, so it is correctly left out. You do not have to remember `chmod +x` — but if your clone has `core.fileMode=false`, git ignores the local mode and the file lands at `100644`; fix it with `git update-index --chmod=+x <path>`.
 
+PowerShell files must be **pure ASCII**. Windows PowerShell 5.1 reads a file with no BOM as ANSI, so a UTF-8 em dash decodes through cp1252 into a smart double quote, PowerShell accepts it as a real quote, and the string ends mid-sentence — the parse step then reports `Unexpected token '<some word>'` several words away from the cause and points at no line. `tests/ascii-ps1.sh` refuses any byte outside printable ASCII and tab in a tracked `.ps1`, and proves on every run that it still can: it scans scratch trees carrying an em dash and a non-breaking space and requires a rejection for each, plus a clean tree that must still pass. Write `-` and `"` rather than pasting typographic characters.
+
 ### Contributing without a Windows machine
 
 You do not need Windows to send a pull request here. Every pull request, including one from a fork, runs [`.github/workflows/test.yml`](.github/workflows/test.yml) on `windows-latest`: JSON validation, a PowerShell parse of every `.ps1`, the secret scan, and the full `tests/run-tests.ps1` suite. That is the same suite you would run locally, on a real Windows PowerShell host.

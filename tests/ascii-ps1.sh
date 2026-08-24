@@ -56,9 +56,10 @@ self_test() {
     tmp=$(mktemp -d "${TMPDIR:-/tmp}/claude-router-ascii-XXXXXX")
     (
       cd "$tmp"
+      # No identity is configured and nothing is committed: `git add` is enough
+      # to make `git ls-files` report the file, and an address-shaped literal
+      # here would be found by tests/scan-secrets.ps1 scanning this very file.
       git init -q .
-      git config user.email ascii@example.com
-      git config user.name ascii
       mkdir -p scripts
       case "$case_name" in
         em-dash) printf 'Write-Host "a dash \342\200\224 here"\n' > scripts/probe.ps1 ;;

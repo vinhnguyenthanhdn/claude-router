@@ -16,7 +16,7 @@ New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 # here would have to be edited by hand every time a script is added, and nothing
 # would report the day it was not.
 $managed = @(Get-ChildItem -LiteralPath $PSScriptRoot -File | Where-Object {
-    @('.ps1', '.cmd') -contains $_.Extension.ToLowerInvariant() -and $_.Name -ne 'install.ps1'
+    @('.ps1') -contains $_.Extension.ToLowerInvariant() -and $_.Name -ne 'install.ps1'
 })
 if ($managed.Count -eq 0) {
     Write-Error 'No managed script was found next to install.ps1.'

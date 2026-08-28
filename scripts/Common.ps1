@@ -80,7 +80,7 @@ function Get-RouterEnvironmentEntries {
     return $entries
 }
 
-function Test-IsManagedEnvironmentName {
+function Test-IsManagedEnvName {
     param([string]$Name)
     return $script:ManagedEnvironmentNames -contains $Name
 }

@@ -9,6 +9,26 @@ permissions:
   contents: read
 
 jobs:
+  # Only a pull request has a base and a head to compare, and only a pull
+  # request has a description to read. On a push this job is absent and the
+  # guard still runs its self-test, as one of the discovered tests/*.sh.
+  scope-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Removed public functions must be named in the pull request description
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: sh tests/scope-guard.sh "$BASE_SHA" "$HEAD_SHA"
+
   windows-powershell:
     runs-on: windows-latest
     timeout-minutes: 10

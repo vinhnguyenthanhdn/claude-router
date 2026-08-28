@@ -10,8 +10,20 @@ if (-not (Test-Path -LiteralPath (Join-Path $repoRoot 'config.example.json'))) {
 }
 
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-foreach ($name in @('Common.ps1', 'claude-9router.ps1', 'claude-9router.cmd', 'vscode-switch.ps1', 'uninstall.ps1')) {
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $InstallDir $name) -Force
+
+# Ask for the property instead of listing names: every Windows entry point in
+# scripts/ is managed, and install.ps1 is the one that stays behind. A name list
+# here would have to be edited by hand every time a script is added, and nothing
+# would report the day it was not.
+$managed = @(Get-ChildItem -LiteralPath $PSScriptRoot -File | Where-Object {
+    @('.ps1', '.cmd') -contains $_.Extension.ToLowerInvariant() -and $_.Name -ne 'install.ps1'
+})
+if ($managed.Count -eq 0) {
+    Write-Error 'No managed script was found next to install.ps1.'
+    exit 1
+}
+foreach ($file in $managed) {
+    Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $InstallDir $file.Name) -Force
 }
 
 $configPath = Join-Path $InstallDir 'config.local.json'

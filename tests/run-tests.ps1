@@ -81,6 +81,36 @@ try {
         if ($errorMessage -notmatch 'Router config not found') {
             throw "Unexpected error message for missing config: $errorMessage"
         }
+
+        # Valid JSON that is not an object. Before this refusal existed the
+        # array fell through to the required-key loop and was reported as a
+        # missing baseUrl. tests/config-refusal-parity.sh keeps the wording the
+        # same as common.sh; these two assert the PowerShell side reaches it.
+        $arrayConfig = Join-Path $temp 'array.config.json'
+        '[1, 2]' | Set-Content -LiteralPath $arrayConfig -Encoding UTF8
+        $env:CLAUDE_ROUTER_CONFIG = $arrayConfig
+        $arrayError = $null
+        try { Get-RouterConfig | Out-Null } catch { $arrayError = $_.Exception.Message }
+        if (-not $arrayError) { throw 'A JSON array was accepted as a config.' }
+        if ($arrayError -notmatch 'expected an object') {
+            throw "Unexpected error message for a JSON array: $arrayError"
+        }
+
+        # A line break cannot survive the trip through an environment variable,
+        # so the reader refuses it rather than truncating the value.
+        $multilineConfig = Join-Path $temp 'multiline.config.json'
+        @{
+            baseUrl = 'http://127.0.0.1:20128'
+            authToken = "line-one`nline-two"
+            mainModel = 'test/model'
+        } | ConvertTo-Json | Set-Content -LiteralPath $multilineConfig -Encoding UTF8
+        $env:CLAUDE_ROUTER_CONFIG = $multilineConfig
+        $multilineError = $null
+        try { Get-RouterConfig | Out-Null } catch { $multilineError = $_.Exception.Message }
+        if (-not $multilineError) { throw 'A value carrying a line break was accepted.' }
+        if ($multilineError -notmatch 'single-line') {
+            throw "Unexpected error message for a multi-line value: $multilineError"
+        }
     } finally {
         $env:CLAUDE_ROUTER_CONFIG = $savedRouterConfigEnv
     }

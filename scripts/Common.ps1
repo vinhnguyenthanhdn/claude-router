@@ -37,6 +37,14 @@ function Get-RouterConfig {
         throw "Invalid JSON in router config '$resolved': $($_.Exception.Message)"
     }
 
+    # Valid JSON that is not an object. Without this the array [1,2] falls
+    # through to the loop below and is reported as a missing baseUrl, which
+    # sends the reader looking for a key in a file that has no keys at all.
+    # tests/config-refusal-parity.sh keeps the wording identical to common.sh.
+    if ($null -eq $config -or $config.GetType().Name -ne 'PSCustomObject') {
+        throw "Invalid JSON in router config '$resolved': expected an object."
+    }
+
     foreach ($name in @('baseUrl', 'authToken', 'mainModel')) {
         $property = $config.PSObject.Properties[$name]
         if ($null -eq $property -or [string]::IsNullOrWhiteSpace([string]$property.Value)) {
@@ -56,13 +64,25 @@ function Get-RouterConfig {
         throw "Replace the placeholder mainModel in config.local.json."
     }
 
-    [pscustomobject]@{
+    $result = [pscustomobject]@{
         Path = $resolved
         BaseUrl = ([string]$config.baseUrl).TrimEnd('/')
         AuthToken = [string]$config.authToken
         MainModel = [string]$config.mainModel
         SmallFastModel = if ($config.PSObject.Properties['smallFastModel']) { [string]$config.smallFastModel } else { '' }
     }
+
+    # Every one of these leaves here as an environment variable, and a line
+    # break cannot survive that intact. Refusing beats truncating a config
+    # silently and routing to half a model id. Mirrors the same check in
+    # common.sh, on the same four values, after the same trimming.
+    foreach ($value in @($result.BaseUrl, $result.AuthToken, $result.MainModel, $result.SmallFastModel)) {
+        if ($value -match "`n") {
+            throw "Config values must be single-line: an environment variable cannot carry a line break."
+        }
+    }
+
+    $result
 }
 
 function Get-RouterEnvironmentEntries {

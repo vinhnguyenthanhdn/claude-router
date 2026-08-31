@@ -65,10 +65,10 @@ let config;
 try {
     config = JSON.parse(fs.readFileSync(path, "utf8"));
 } catch (err) {
-    die(`Invalid JSON in router config ${JSON.stringify(path)}: ${err.message}`);
+    die(`Invalid JSON in router config '\''${path}'\'': ${err.message}`);
 }
 if (config === null || typeof config !== "object" || Array.isArray(config)) {
-    die(`Invalid JSON in router config ${JSON.stringify(path)}: expected an object.`);
+    die(`Invalid JSON in router config '\''${path}'\'': expected an object.`);
 }
 
 const read = (name) => (typeof config[name] === "string" ? config[name] : config[name] == null ? "" : String(config[name]));

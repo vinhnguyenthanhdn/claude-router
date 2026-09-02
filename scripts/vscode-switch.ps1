@@ -3,10 +3,12 @@ param(
     [ValidateSet('on', 'off', 'status')]
     [string]$Mode = 'status',
     [string]$ConfigPath,
-    [string]$SettingsPath = (Join-Path $env:APPDATA 'Code\User\settings.json')
+    [string]$SettingsPath,
+    [switch]$Insiders
 )
 
 . (Join-Path $PSScriptRoot 'Common.ps1')
+$SettingsPath = Resolve-VSCodeSettingsPath $SettingsPath -Insiders:$Insiders
 $settingsKey = 'claudeCode.environmentVariables'
 
 if (-not (Test-Path -LiteralPath $SettingsPath -PathType Leaf)) {

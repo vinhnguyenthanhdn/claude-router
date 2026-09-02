@@ -124,10 +124,15 @@ What the extension does read is its own setting, `claudeCode.environmentVariable
 
 ```powershell
 # Windows
-& "$env:USERPROFILE\.claude\9router\vscode-switch.ps1" on       # enable routing for the panel
-& "$env:USERPROFILE\.claude\9router\vscode-switch.ps1" status   # current mode (token is never printed)
-& "$env:USERPROFILE\.claude\9router\vscode-switch.ps1" off      # back to the default/direct environment
+& "$env:USERPROFILE\.claude\9router\vscode-switch.ps1" on            # enable routing for the panel
+& "$env:USERPROFILE\.claude\9router\vscode-switch.ps1" status        # current mode (token is never printed)
+& "$env:USERPROFILE\.claude\9router\vscode-switch.ps1" off           # back to the default/direct environment
+
+# VSCode Insiders edition
+& "$env:USERPROFILE\.claude\9router\vscode-switch.ps1" on -Insiders  # route VSCode Insiders panel
 ```
+
+Without `-Insiders` the switch always targets the stable edition, even when only Insiders is installed; it never picks an editor for you.
 
 ```sh
 # macOS and Linux

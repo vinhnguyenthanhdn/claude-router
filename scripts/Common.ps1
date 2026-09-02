@@ -113,3 +113,23 @@ function Write-JsonFile {
     $json = $Value | ConvertTo-Json -Depth 30
     [IO.File]::WriteAllText($Path, $json + [Environment]::NewLine, (New-Object Text.UTF8Encoding($false)))
 }
+
+function Resolve-VSCodeSettingsPath {
+    param(
+        [string]$SettingsPath,
+        [switch]$Insiders
+    )
+
+    if ($SettingsPath) {
+        return $SettingsPath
+    }
+
+    # No fallback to the other edition: with both editors installed, silently
+    # picking Insiders would stop routing the editor the user actually runs.
+    # The not-found error downstream prints the resolved path, which already
+    # says which edition was looked for and where.
+    $appData = if ($env:APPDATA) { $env:APPDATA } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) 'AppData\Roaming' }
+    $folder = if ($Insiders) { 'Code - Insiders' } else { 'Code' }
+    return Join-Path $appData (Join-Path $folder 'User\settings.json')
+}
+

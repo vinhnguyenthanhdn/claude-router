@@ -166,8 +166,51 @@ try {
         if ($emptyError -notmatch [regex]::Escape($emptyPropConfig)) {
             throw "Empty property config error did not name the offending file path: $emptyError"
         }
+
     } finally {
         $env:CLAUDE_ROUTER_CONFIG = $savedRouterConfigEnv
+    }
+
+    # Resolve-VSCodeSettingsPath reads $env:APPDATA, so the resolution is
+    # testable without any VSCode install: point it at a scratch tree, build
+    # the state each case needs, and assert on the returned path.
+    $savedAppData = $env:APPDATA
+    try {
+        $fakeAppData = Join-Path $temp 'appdata'
+        $stableSettings = Join-Path $fakeAppData 'Code\User\settings.json'
+        $insidersSettings = Join-Path $fakeAppData 'Code - Insiders\User\settings.json'
+        $env:APPDATA = $fakeAppData
+
+        # No flag resolves to stable even when neither editor is installed,
+        # so the not-found error downstream names the editor the user meant.
+        $resolved = Resolve-VSCodeSettingsPath
+        if ($resolved -ne $stableSettings) {
+            throw "Expected the stable path with no flag, got: $resolved"
+        }
+
+        # -Insiders resolves to Insiders, installed or not.
+        $resolved = Resolve-VSCodeSettingsPath -Insiders
+        if ($resolved -ne $insidersSettings) {
+            throw "Expected the Insiders path with -Insiders, got: $resolved"
+        }
+
+        # Only Insiders installed and no flag still resolves to stable: the
+        # switch never silently writes to an editor the user did not name.
+        New-Item -ItemType Directory -Force (Split-Path $insidersSettings) | Out-Null
+        '{}' | Set-Content -LiteralPath $insidersSettings -Encoding UTF8
+        $resolved = Resolve-VSCodeSettingsPath
+        if ($resolved -ne $stableSettings) {
+            throw "No flag must not fall back to the Insiders path, got: $resolved"
+        }
+
+        # An explicit path wins over the flag.
+        $explicitSettings = Join-Path $temp 'explicit-settings.json'
+        $resolved = Resolve-VSCodeSettingsPath -SettingsPath $explicitSettings -Insiders
+        if ($resolved -ne $explicitSettings) {
+            throw "An explicit -SettingsPath must win over -Insiders, got: $resolved"
+        }
+    } finally {
+        $env:APPDATA = $savedAppData
     }
 
     Write-Host 'All tests passed.' -ForegroundColor Green

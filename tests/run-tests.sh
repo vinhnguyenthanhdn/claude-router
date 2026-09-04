@@ -371,6 +371,64 @@ esac
 out=$(launch --config "$temp/no-such-config.json")
 check_contains 'a missing config names the remedy' "$out" 'Copy config.example.json to config.local.json'
 
+# The two halves of the failure surface, and the cases have to separate them.
+# A refusal the launcher has words for is the whole answer; inviting a bug
+# report on top of one teaches the reader to ignore the invitation, so the
+# report lines must be absent here and present below.
+case "$out" in
+    *'Report it here'*) fail 'a refusal it has words for does not ask for a bug report' 'the report invitation was printed anyway' ;;
+    *) ok 'a refusal it has words for does not ask for a bug report' ;;
+esac
+
+# Claude Code missing is the user's to fix, so it gets one actionable line and
+# no invitation either. The PATH keeps node — the config layer needs it, and a
+# run that dies before the launcher ever looks for `claude` would satisfy this
+# case for the wrong reason — and keeps nothing else beyond the system
+# directories, which is where `claude` is not.
+noclaude="$temp/no-claude-bin"
+mkdir -p "$noclaude"
+ln -s "$(command -v node)" "$noclaude/node"
+out=$(
+    PATH="$noclaude:/usr/bin:/bin"
+    export PATH
+    set +e
+    text=$(CLAUDE_ROUTER_CONFIG="$small" "$launcher" 2>&1)
+    status=$?
+    set -e
+    printf '%s\nSTATUS=%s\n' "$text" "$status"
+)
+check_contains 'a missing Claude Code is named, not left to the shell' "$out" 'Claude Code was not found on PATH'
+check_contains 'a missing Claude Code names where the steps are' "$out" 'docs/SETUP.md'
+check_eq 'a missing Claude Code exits 127' "$(field "$out" '$')" 'STATUS=127'
+case "$out" in
+    *'Report it here'*) fail 'a missing Claude Code does not ask for a bug report' 'the report invitation was printed anyway' ;;
+    *) ok 'a missing Claude Code does not ask for a bug report' ;;
+esac
+
+# An exit the launcher never described. The mutation lives in a copy of the
+# real scripts, so what is under test is the trap the shipped launcher installs
+# and not a rehearsal of it written here. Injected after the config load so the
+# case cannot be satisfied by a config refusal.
+mutant="$temp/mutant"
+mkdir -p "$mutant/scripts"
+cp "$root/scripts/common.sh" "$mutant/scripts/"
+sed 's|^router_load_config \(.*\)$|router_load_config \1\nfalse|' \
+    "$root/scripts/claude-9router" > "$mutant/scripts/claude-9router"
+chmod +x "$mutant/scripts/claude-9router"
+out=$(
+    PATH="$stub_dir:$PATH"
+    export PATH
+    set +e
+    text=$(CLAUDE_ROUTER_CONFIG="$small" "$mutant/scripts/claude-9router" --dry-run 2>&1)
+    status=$?
+    set -e
+    printf '%s\nSTATUS=%s\n' "$text" "$status"
+)
+check_contains 'an undescribed exit says so instead of printing nothing' "$out" 'an error it has no message for'
+check_contains 'an undescribed exit names this repository' "$out" 'claude-router/issues'
+check_contains 'an undescribed exit sends router errors upstream' "$out" '9router/issues'
+check_eq 'an undescribed exit keeps its status' "$(field "$out" '$')" 'STATUS=1'
+
 # --- the VSCode switch -----------------------------------------------------
 #
 # The switch edits a file the user also edits by hand, so the assertions read

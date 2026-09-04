@@ -14,6 +14,12 @@ export ROUTER_SCRIPT_DIR
 # shellcheck source=common.sh
 . "$script_dir/common.sh"
 
+# Anything that stops this script without a message of its own gets one, plus
+# the two places a report belongs. Under `set -e` the alternative is a bare
+# shell line naming a command, which tells the user nothing they can act on and
+# nowhere to send it.
+trap 'router_report_exit' EXIT
+
 config_path=''
 dry_run=0
 
@@ -24,7 +30,7 @@ dry_run=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --config)
-            [ $# -ge 2 ] || { echo "--config needs a path." >&2; exit 2; }
+            [ $# -ge 2 ] || { echo "--config needs a path." >&2; router_exit_expected 2; }
             config_path="$2"
             shift 2
             ;;
@@ -46,7 +52,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-router_load_config "$config_path" || exit 1
+router_load_config "$config_path" || router_exit_expected 1
 
 ANTHROPIC_BASE_URL="$ROUTER_BASE_URL"
 ANTHROPIC_AUTH_TOKEN="$ROUTER_AUTH_TOKEN"
@@ -76,6 +82,10 @@ if [ "$dry_run" = 1 ]; then
     echo "[9Router] dry run; Claude Code was not started."
     exit 0
 fi
+
+# Asked before exec so the refusal comes from the launcher, with a name and a
+# next step, instead of from the shell after the environment is already set.
+router_require_claude
 
 # exec replaces this shell, so Claude Code's exit code is this command's exit
 # code with nothing in between to lose or rewrite it.

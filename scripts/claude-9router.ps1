@@ -7,6 +7,15 @@ param(
 
 . (Join-Path $PSScriptRoot 'Common.ps1')
 
+# Anything that stops this script without a message of its own gets one, plus
+# the two places a report belongs. The catch below still owns the config
+# refusals: those are already the whole answer, and inviting a bug report on top
+# of one teaches the user to ignore the invitation.
+trap {
+    Write-RouterUnexpected $_.Exception.Message
+    exit 70
+}
+
 try {
     $config = Get-RouterConfig $ConfigPath
 } catch {
@@ -30,6 +39,11 @@ if ($DryRun) {
     Write-Host '[9Router] dry run; Claude Code was not started.' -ForegroundColor DarkGray
     exit 0
 }
+
+# Asked before the invocation so the refusal comes from the launcher, with a
+# name and a next step, instead of from PowerShell after the environment is
+# already set.
+Assert-ClaudeOnPath
 
 & claude @ClaudeArgs
 exit $LASTEXITCODE

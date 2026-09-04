@@ -159,13 +159,16 @@ Then open 9Router **Console Log** and confirm the request was routed to the sele
 
 ### On macOS and Linux
 
-Step 4 does not apply — there is no installer for these platforms — so the launcher runs out of the clone and the config lives next to it:
+`./scripts/install.sh` installs `claude-9router` and `vscode-switch` into `~/.local/bin` (pass a different directory as the first argument to change that). Each installed name is a two-line wrapper that runs the launcher in the clone, so the launcher still runs out of the clone and the config lives next to it:
 
 ```sh
 cp config.example.json config.local.json   # then fill in baseUrl, authToken, mainModel
-./scripts/claude-9router --dry-run
-./scripts/claude-9router -p "Reply with exactly: ROUTER_OK"
+./scripts/install.sh
+claude-9router --dry-run
+claude-9router -p "Reply with exactly: ROUTER_OK"
 ```
+
+`./scripts/uninstall.sh` removes them again, and removes a name only when it is the wrapper or symlink this clone installed. Skipping the installer and running `./scripts/claude-9router` from the clone works exactly as before.
 
 The variables, the removal of a conflicting `ANTHROPIC_API_KEY`, and the promise not to touch `~/.claude/settings.json` are identical. Three practical differences:
 
@@ -173,7 +176,7 @@ The variables, the removal of a conflicting `ANTHROPIC_API_KEY`, and the promise
 - The config is looked up in the same order, but the last two candidates resolve to `scripts/config.local.json` and `config.local.json` in the clone rather than under `%USERPROFILE%\.claude\9router`. `CLAUDE_ROUTER_CONFIG` works the same way and is the cleanest way to keep the config outside the clone.
 - Because you run the clone directly, `git pull` **is** the upgrade — the gap section 8 describes does not exist here. The other half of it still does: `config.local.json` is copied once, so a key added to the example later is absent from yours.
 
-Section 6 applies here too, with `./scripts/vscode-switch` in place of `vscode-switch.ps1`.
+Section 6 applies here too, with `./scripts/vscode-switch` — or plain `vscode-switch` once the installer has run — in place of `vscode-switch.ps1`.
 
 ## 6. Use the native VSCode extension
 

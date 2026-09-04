@@ -112,6 +112,56 @@ process.stdout.write(values.join("\n") + "\n");
     export ROUTER_CONFIG_PATH ROUTER_BASE_URL ROUTER_AUTH_TOKEN ROUTER_MAIN_MODEL ROUTER_SMALL_FAST_MODEL
 }
 
+# Where a failure goes, and the two destinations are not interchangeable:
+# anything the router, a provider or a model rejected happens inside 9Router and
+# belongs upstream, while anything this toolkit did before handing over belongs
+# here. A user who cannot tell the two apart reports neither.
+#
+# Printed with printf rather than echo on purpose: tests/config-refusal-parity.sh
+# claims every echoed stderr line in this file as a config refusal and requires
+# Common.ps1 to throw the same words, and these lines are not refusals of a
+# config. tests/report-destination-parity.sh is the gate that holds them to
+# their PowerShell counterparts. Quoting the echo form in a comment here is
+# enough to be counted, which is what a pattern reading source text costs.
+ROUTER_ISSUES_URL='https://github.com/vinhnguyenthanhdn/claude-router/issues/new/choose'
+ROUTER_UPSTREAM_URL='https://github.com/decolua/9router/issues'
+
+router_report_unexpected() {
+    printf '%s\n' "claude-router stopped with an error it has no message for: $1" >&2
+    printf '%s\n' "Report it here, with this output and the command you ran: $ROUTER_ISSUES_URL" >&2
+    printf '%s\n' "If the router or a provider rejected the request, that belongs upstream: $ROUTER_UPSTREAM_URL" >&2
+}
+
+# A failure the toolkit already has words for: a config it refused by name, an
+# option used wrong, a dependency it can tell the user to install. The exit trap
+# in the entries stays quiet for these — the message is already the whole answer,
+# and inviting a bug report on top of it teaches the user to ignore the invitation.
+router_exit_expected() {
+    ROUTER_EXPECTED_EXIT=1
+    export ROUTER_EXPECTED_EXIT
+    exit "${1:-1}"
+}
+
+# Reports any exit the launcher did not describe itself. Installed as an EXIT
+# trap by the entries; `exec claude` replaces the process, so a failure that
+# comes out of Claude Code or the router is never attributed to the wrapper.
+router_report_exit() {
+    _rre_status=$?
+    [ "$_rre_status" -eq 0 ] && return 0
+    [ "${ROUTER_EXPECTED_EXIT:-0}" = 1 ] && return "$_rre_status"
+    router_report_unexpected "it exited with status $_rre_status before Claude Code started"
+    return "$_rre_status"
+}
+
+# Claude Code itself is the one dependency the launcher cannot work around, and
+# `exec claude` on a machine without it prints a shell-level "not found" that
+# names neither this toolkit nor what to install.
+router_require_claude() {
+    command -v claude >/dev/null 2>&1 && return 0
+    printf '%s\n' 'Claude Code was not found on PATH. Install it first, then run this launcher again; docs/SETUP.md has the steps.' >&2
+    router_exit_expected 127
+}
+
 # The environment names the toolkit owns. Anything else in a user's environment
 # or settings file is none of its business — the Windows switch keeps unrelated
 # entries untouched and the shell side has to keep the same promise.

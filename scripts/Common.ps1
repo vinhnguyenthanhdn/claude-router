@@ -9,6 +9,34 @@ $script:ManagedEnvironmentNames = @(
     'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'
 )
 
+# Where a failure goes, and the two destinations are not interchangeable:
+# anything the router, a provider or a model rejected happens inside 9Router and
+# belongs upstream, while anything this toolkit did before handing over belongs
+# here. A user who cannot tell the two apart reports neither.
+#
+# Written to the error stream directly rather than through Write-Error: these are
+# the words the user has to read and copy, and Write-Error wraps them in a record
+# whose formatting depends on the host. tests/report-destination-parity.sh holds
+# them to the wording common.sh prints.
+$script:RouterIssuesUrl = 'https://github.com/vinhnguyenthanhdn/claude-router/issues/new/choose'
+$script:RouterUpstreamUrl = 'https://github.com/decolua/9router/issues'
+
+function Write-RouterUnexpected {
+    param([string]$Detail)
+    [Console]::Error.WriteLine("claude-router stopped with an error it has no message for: $Detail")
+    [Console]::Error.WriteLine("Report it here, with this output and the command you ran: $script:RouterIssuesUrl")
+    [Console]::Error.WriteLine("If the router or a provider rejected the request, that belongs upstream: $script:RouterUpstreamUrl")
+}
+
+# Claude Code itself is the one dependency the launcher cannot work around, and
+# invoking a missing command prints a CommandNotFoundException that names neither
+# this toolkit nor what to install.
+function Assert-ClaudeOnPath {
+    if (Get-Command claude -ErrorAction SilentlyContinue) { return }
+    [Console]::Error.WriteLine('Claude Code was not found on PATH. Install it first, then run this launcher again; docs/SETUP.md has the steps.')
+    exit 127
+}
+
 function Resolve-RouterConfigPath {
     param([string]$ConfigPath)
 

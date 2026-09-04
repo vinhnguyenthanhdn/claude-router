@@ -197,6 +197,17 @@ The narrow part is the point: the launcher routes only the process it starts, so
 - Some providers do not license subscription or OAuth sessions for proxy/router use. Accounts may be restricted or banned. Use only accounts and endpoints you are authorized to route, and follow each provider's terms.
 - The toolkit sends Claude Code conversation context and tool requests to the selected provider through 9Router. Do not route sensitive data to a provider that is not approved for it.
 
+## When it fails
+
+A failure the launcher recognises — a config it will not accept, an option used wrong, Claude Code not on `PATH` — prints one line saying what to change, and nothing else. That line is the whole answer, so it does not ask you to file anything.
+
+Anything else prints where it belongs, because the two destinations are not interchangeable:
+
+- the toolkit stopping before it hands over is [an issue here](https://github.com/vinhnguyenthanhdn/claude-router/issues/new/choose) — include the output and the command you ran;
+- the router, a provider or a model rejecting the request happens inside 9Router and belongs [upstream](https://github.com/decolua/9router/issues).
+
+Both entries print the same words on either platform, and `tests/report-destination-parity.sh` fails the build when one side drifts — including when one side quietly points somewhere else.
+
 ## Testing
 
 ```powershell
